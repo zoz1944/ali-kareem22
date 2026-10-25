@@ -136,10 +136,10 @@ function calc(ym){
  const elapsed=cur?+t.slice(8):(ym<ymOf(t)?days:0);
  const todaySp=cur?exps.filter(x=>x.date===t).reduce((s,x)=>s+x.amt,0):0;
  const plan=Math.max(0,spendable/days);
- const limit=a.daily>0?a.daily:plan;
+ const limit=a.daily>0?a.daily:0;
  const left=spendable-spent;
  const dleft=cur?days-elapsed+1:days;
- const allowed=cur?Math.max(0,(spendable-(spent-todaySp))/dleft):plan;
+ const allowed=limit-todaySp;
  const pace=elapsed>0?spent/elapsed*days:0;
  return{sal,bal,inc,extra,exps,txs,spent,obs,F,V,spendable,todaySp,plan,limit,left,allowed,pace,days,cur,elapsed};
 }
@@ -158,8 +158,11 @@ function salCard(c){
  if(c.sal<=0&&c.extra<=0)return`<div class="card" style="text-align:center"><h3>ابدأ من هنا</h3><div class="tip" style="margin-bottom:12px">أدخل راتب هذا الشهر، وستُخصم منه كل مصروفاتك والتزاماتك تلقائياً.</div><button class="btn" data-a="sal">إدخال الراتب</button></div>`;
  const used=Math.min(100,(c.F+c.spent)/c.inc*100);
  return`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">المتبقي من الراتب</h3><button class="chip" data-a="sal">تعديل الراتب</button></div><div class="big ${c.bal<0?'bad':'good'}" style="font-size:38px;margin:8px 0">${fmt(c.bal)}</div><div class="bar"><i style="width:${used}%;background:${c.bal<0?'var(--bad)':'var(--ac)'}"></i></div><div class="hs" style="margin-top:14px"><div><span>الراتب${c.extra?' + دخل إضافي':''}</span><b>${fmt(c.inc)}</b></div><div><span>− الالتزامات والأقساط</span><b>${fmt(c.F)}</b></div><div><span>− المصروفات</span><b>${fmt(c.spent)}</b></div></div></div>`}
+function daySheet(){const o=sheet(`<h2>المبلغ المسموح صرفه يومياً</h2><div class="tip">أنت من يحدد هذا المبلغ، وسيُقارن به صرفك كل يوم.</div><label>المبلغ</label><input id="a" inputmode="decimal" value="${S.s.daily||''}" autofocus><div class="acts"><button class="btn g" id="x">إلغاء</button><button class="btn" id="ok">حفظ</button></div>`);
+ o.querySelector('#x').onclick=()=>o.remove();
+ o.querySelector('#ok').onclick=()=>{const v=num(o.querySelector('#a').value);if(v<=0)return toast('أدخل مبلغاً أكبر من صفر');S.s.daily=v;save();o.remove();render();toast('تم حفظ المبلغ اليومي')}}
 function salSheet(){const c=calc(vm);const o=sheet(`<h2>راتب ${MN[+vm.slice(5)-1]}</h2><label>المبلغ</label><input id="a" inputmode="decimal" value="${c.sal||''}" autofocus><div class="acts"><button class="btn g" id="m">لهذا الشهر فقط</button><button class="btn" id="al">لكل الأشهر</button></div>`);
- const go=all=>{const v=num(o.querySelector('#a').value);if(v<=0)return toast('أدخل مبلغ الراتب');S.sm=S.sm||{};if(all){S.s.salary=v;delete S.sm[vm]}else S.sm[vm]=v;save();o.remove();render();toast('تم حفظ الراتب')};
+ const go=all=>{const v=num(o.querySelector('#a').value);if(v<=0)return toast('أدخل مبلغ الراتب');S.sm=S.sm||{};if(all){S.s.salary=v;delete S.sm[vm]}else S.sm[vm]=v;save();o.remove();render();if(!S.s.daily)daySheet();else toast('تم حفظ الراتب')};
  o.querySelector('#m').onclick=()=>go(0);o.querySelector('#al').onclick=()=>go(1)}
 const V={
 home(c){
@@ -168,9 +171,9 @@ home(c){
  const cats={};c.exps.forEach(x=>cats[x.cat]=(cats[x.cat]||0)+x.amt);
  const cl=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
  const up=c.obs.filter(o=>!(o.paid||{})[vm]);
- const nxt=c.cur&&c.elapsed>0?`<div class="card"><h3>وتيرة الصرف</h3><div class="tip">بمعدلك الحالي ستصرف حتى نهاية الشهر <b class="${c.pace>c.spendable?'bad':'good'}">${fmt(c.pace)}</b> من أصل <b>${fmt(c.spendable)}</b> متاح للصرف.</div></div>`:'';
- return salCard(c)+`<div class="card hero"><div class="ring"><svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="85"/><circle class="fg" cx="100" cy="100" r="85" style="stroke:${over?'var(--bad)':'var(--ac)'}" stroke-dasharray="${r}" stroke-dashoffset="${r}" data-o="${r*(1-p)}"/></svg><div class="mid"><small>${c.cur?'صرفت اليوم':'متوسط يومي مسموح'}</small><b class="${over?'bad':''}">${fmt(c.cur?c.todaySp:c.limit).replace(' '+S.s.cur,'')}</b><small>${c.cur?'من '+fmt(c.limit):S.s.cur}</small></div></div>
- <div class="hs"><div><span>مسموح لك اليوم</span><b class="gold">${fmt(c.allowed)}</b></div><div><span>المتبقي للصرف هذا الشهر</span><b class="${c.left<0?'bad':'good'}">${fmt(c.left)}</b></div><div><span>الدخل</span><b>${fmt(c.inc)}</b></div></div></div>
+ const nxt=c.cur&&c.elapsed>0?`<div class="card"><h3>وتيرة الصرف</h3><div class="tip">بمعدلك الحالي ستصرف حتى نهاية الشهر <b class="${c.limit>0&&c.pace>c.limit*c.days?'bad':'good'}">${fmt(c.pace)}</b>${c.limit>0?` بينما حدّك اليومي يعادل <b>${fmt(c.limit*c.days)}</b> في الشهر.`:'.'}</div></div>`:'';
+ return salCard(c)+`<div class="card hero"><div class="ring"><svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="85"/><circle class="fg" cx="100" cy="100" r="85" style="stroke:${over?'var(--bad)':'var(--ac)'}" stroke-dasharray="${r}" stroke-dashoffset="${r}" data-o="${r*(1-p)}"/></svg><div class="mid"><small>${c.cur?'صرفت اليوم':'الحد اليومي'}</small><b class="${over?'bad':''}">${fmt(c.cur?c.todaySp:c.limit).replace(' '+S.s.cur,'')}</b><small>${c.cur?(c.limit>0?'من '+fmt(c.limit):'حدد المبلغ اليومي'):S.s.cur}</small></div></div>
+ <div class="hs">${c.limit>0?`<div><span>المتبقي لك اليوم</span><b class="${c.allowed<0?'bad':'good'}">${fmt(c.allowed)}</b></div><div><span>الحد اليومي الذي حددته</span><b class="gold">${fmt(c.limit)}</b></div>`:`<div><span>لم تحدد مبلغاً يومياً بعد</span></div>`}<button class="btn" data-a="day">${c.limit>0?'تعديل الحد اليومي':'تحديد المبلغ اليومي'}</button></div></div>
  <div class="card"><h3>كيف يتوزع دخل الشهر</h3><div class="seg"><i style="width:${w(c.F)};background:var(--ac2)"></i><i style="width:${w(c.V)};background:var(--ac)"></i><i style="width:${w(c.spent)};background:var(--bad)"></i></div>
  <div class="lg"><em style="--c:var(--ac2)">التزامات ${fmt(c.F)}</em><em style="--c:var(--ac)">ادخار ${fmt(c.V)}</em><em style="--c:var(--bad)">مصروف ${fmt(c.spent)}</em></div></div>${nxt}
  <div class="grid2"><div class="card"><h3>المصروف حسب الفئة</h3>${cl.length?cl.map(([k,v])=>`<div class="cat"><div><span>${cat(k)[2]} ${cat(k)[1]}</span><b>${fmt(v)}</b></div><div class="bar"><i style="width:${v/c.spent*100}%"></i></div></div>`).join(''):'<div class="empty">لا مصروفات بعد.<br>اضغط + لتسجيل أول مصروف.</div>'}</div>
@@ -188,7 +191,7 @@ save(c){
  const plan=a.before+c.V+nx, planLeft=a.before+c.V+Math.max(0,c.left)+nx, pace=a.before+(c.inc-c.F-(c.cur&&c.elapsed?c.pace:c.spent))+nx;
  return`<div class="card"><h3>خطة الادخار الشهرية</h3><div class="chips"><button class="chip ${a.saveType==='percent'?'on':''}" data-a="st" data-v="percent">نسبة %</button><button class="chip ${a.saveType==='amount'?'on':''}" data-a="st" data-v="amount">مبلغ ثابت</button></div>
  <label>${a.saveType==='percent'?'نسبة الادخار من الدخل':'مبلغ الادخار الشهري'}</label><input id="sv" inputmode="decimal" value="${a.saveVal}" data-a="in" data-k="saveVal">
- <label>الصرف اليومي (اتركه 0 ليُحسب تلقائياً: ${fmt(c.plan)})</label><input inputmode="decimal" value="${a.daily}" data-a="in" data-k="daily">
+ <label>المبلغ المسموح صرفه يومياً</label><input inputmode="decimal" value="${a.daily}" data-a="in" data-k="daily">
  <label>رصيد مدّخر سابقاً</label><input inputmode="decimal" value="${a.before}" data-a="in" data-k="before"></div>
  <div class="card"><h3>كم سيكون معك عند الراتب القادم؟</h3><div class="big good">${fmt(planLeft)}</div><div class="tip">= رصيدك السابق ${fmt(a.before)} + ادخار هذا الشهر ${fmt(c.V)} + المتبقي غير المصروف ${fmt(Math.max(0,c.left))} + الراتب القادم ${fmt(nx)}</div></div>
  <div class="grid2"><div class="card"><h3>إذا التزمت بالخطة فقط</h3><div class="big">${fmt(plan)}</div><div class="tip">الادخار المخطط دون احتساب المتبقي.</div></div>
@@ -229,6 +232,7 @@ function addObl(){
 document.addEventListener('click',e=>{
  const b=e.target.closest('[data-a]');if(!b||b.tagName==='INPUT')return;const a=b.dataset.a,id=+b.dataset.i;
  if(a==='sal')salSheet();
+ else if(a==='day')daySheet();
  else if(a==='nav'){page=b.dataset.p;render(1)}
  else if(a==='pm'){vm=addM(vm,-1);render()}else if(a==='nm'){vm=addM(vm,1);render()}
  else if(a==='add'){page==='obl'?addObl():addTx()}
